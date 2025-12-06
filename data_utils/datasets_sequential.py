@@ -67,6 +67,62 @@ def build_sim_graph(user_history_lists, mode):
         dgl.save_graphs(graph_file, [g])
         return g
 
+def build_co_interaction_graph(user_history_lists, mode):
+    k = configs['model']['sim_group_k']
+    graph_file = path.join(configs['data']['dir'], f"sim_graph_{k}_{mode}.bin")
+    try:
+        g = dgl.load_graphs(graph_file, [0])
+        print("loading isim graph from DGL binary file...")
+        return g[0][0]
+    except:
+        print("building isim graph...")
+        row = []
+        col = []
+        for uid, item_seq in user_history_lists.items():
+            seq_len = len(item_seq)
+            col.extend(item_seq)
+            row.extend([uid]*seq_len)
+        row = np.array(row)
+        col = np.array(col)
+        # n_users, n_items
+        cf_graph = sp.csr_matrix(([1]*len(row), (row, col)), shape=(
+            configs['data']['user_num']+1, configs['data']['item_num']+1), dtype=np.float32)
+        similarity = cosine_similarity(cf_graph.transpose())
+        # filter topk connections
+        sim_items_slices = []
+        sim_weights_slices = []
+        i = 0
+        while i < similarity.shape[0]:
+            similarity = similarity[i:, :]
+            sim = similarity[:256, :]
+            sim_items = np.argpartition(sim, -(k+1), axis=1)[:, -(k+1):]
+            sim_weights = np.take_along_axis(sim, sim_items, axis=1)
+            sim_items_slices.append(sim_items)
+            sim_weights_slices.append(sim_weights)
+            i = i + 256
+        sim = similarity[256:, :]
+        sim_items = np.argpartition(sim, -(k+1), axis=1)[:, -(k+1):]
+        sim_weights = np.take_along_axis(sim, sim_items, axis=1)
+        sim_items_slices.append(sim_items)
+        sim_weights_slices.append(sim_weights)
+
+        sim_items = np.concatenate(sim_items_slices, axis=0)
+        sim_weights = np.concatenate(sim_weights_slices, axis=0)
+        row = []
+        col = []
+        for i in range(len(sim_items)):
+            row.extend([i]*len(sim_items[i]))
+            col.extend(sim_items[i])
+        values = sim_weights / sim_weights.sum(axis=1, keepdims=True)
+        values = np.nan_to_num(values).flatten()
+        adj_mat = sp.csr_matrix((values, (row, col)), shape=(
+            configs['data']['item_num'] + 1, configs['data']['item_num'] + 1))
+        g = dgl.from_scipy(adj_mat, 'w')
+        g.edata['w'] = g.edata['w'].float()
+        print("saving isim graph to binary file...")
+        dgl.save_graphs(graph_file, [g])
+        return g
+
 
 def build_adj_graph(user_history_lists, mode):
     graph_file = path.join(configs['data']['dir'], f"adj_graph_{mode}.bin")
@@ -219,6 +275,10 @@ class SequentialDataset(data.Dataset):
         
         if configs['model']['name'] == 'mgrec':
             self.transition_graph, self.user_edges = build_transition_graph(self.user_history_lists, mode)
+            self.co_interaction_graph = build_co_interaction_graph(self.user_history_lists, mode)
+
+        if configs['model']['name'] == 'dcrec':
+            self.adj_graph, self.user_edges = build_adj_graph(self.user_history_lists, mode)
             self.sim_graph = build_sim_graph(self.user_history_lists, mode)
 
     def _pad_seq(self, seq):
