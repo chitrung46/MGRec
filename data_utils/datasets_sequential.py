@@ -132,8 +132,8 @@ def build_adj_graph(user_history_lists, mode):
         else:
             return g, None
         
-def build_transaction_graph(user_history_lists, mode):
-    graph_file = path.join(configs['data']['dir'], f"transaction_graph_{mode}.bin")
+def build_transition_graph(user_history_lists, mode):
+    graph_file = path.join(configs['data']['dir'], f"transition_graph_{mode}.bin")
     user_edges_file = path.join(configs['data']['dir'], "user_edges.pkl.zip")
     try:
         g = dgl.load_graphs(graph_file, [0])
@@ -218,7 +218,7 @@ class SequentialDataset(data.Dataset):
                 self.last_items, dtype=np.int32).reshape(-1, 1).tolist()
         
         if configs['model']['name'] == 'dcrec_seq':
-            self.transaction_graph, self.user_edges = build_transaction_graph(self.user_history_lists, mode)
+            self.transaction_graph, self.user_edges = build_transition_graph(self.user_history_lists, mode)
             self.sim_graph = build_sim_graph(self.user_history_lists, mode)
 
     def _pad_seq(self, seq):
