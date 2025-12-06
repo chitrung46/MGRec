@@ -217,8 +217,8 @@ class SequentialDataset(data.Dataset):
             self.user_pos_lists = np.asarray(
                 self.last_items, dtype=np.int32).reshape(-1, 1).tolist()
         
-        if configs['model']['name'] == 'dcrec_seq':
-            self.transaction_graph, self.user_edges = build_transition_graph(self.user_history_lists, mode)
+        if configs['model']['name'] == 'mgrec':
+            self.transition_graph, self.user_edges = build_transition_graph(self.user_history_lists, mode)
             self.sim_graph = build_sim_graph(self.user_history_lists, mode)
 
     def _pad_seq(self, seq):
