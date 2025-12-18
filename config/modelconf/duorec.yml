@@ -13,7 +13,7 @@ train:
   seed: 2023
 
 test:
-  metrics: [recall, ndcg]
+  metrics: [mrr, ndcg]
   k: [5, 10, 20]
   batch_size: 512
 

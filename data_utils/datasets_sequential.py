@@ -277,7 +277,7 @@ class SequentialDataset(data.Dataset):
             self.transition_graph, self.user_edges = build_transition_graph(self.user_history_lists, mode)
             self.co_interaction_graph = build_co_interaction_graph(self.user_history_lists, mode)
 
-        if configs['model']['name'] == 'dcrec':
+        if configs['model']['name'] == 'dcrec_seq':
             self.adj_graph, self.user_edges = build_adj_graph(self.user_history_lists, mode)
             self.sim_graph = build_sim_graph(self.user_history_lists, mode)
 

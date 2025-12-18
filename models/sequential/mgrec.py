@@ -73,6 +73,19 @@ def build_ui_interaction_graph(batch_user, batch_seqs, item_num, device):
     ui_interaction_graph = dgl.batch(ui_interaction_graphs)
     return ui_interaction_graph
 
+def recency_attention(item_emb):
+    B, N, D = item_emb.shape
+    seq_len = (item_emb > 0).sum(dim=1)                                               # (B,)
+
+    pos = torch.arange(N, device=item_emb.device)                                     # (N,)
+    dist = (N - 1) - pos                                                              # (N,), last -> 0
+    dist = -dist.float()                                                              # (N,)
+
+    logits = dist.unsqueeze(0).expand(B, N)                                           # (B, N)
+
+    attn = F.softmax(logits, dim=-1)                                                  # (B, N)
+    new_item_emb = (attn.unsqueeze(-1) * item_emb).sum(dim=1) / seq_len.unsqueeze(-1)       # (B, D)
+    return new_item_emb
 
 class GCN(nn.Module):
     def __init__(self, in_dim, out_dim, dropout_prob=0.7):
@@ -138,7 +151,7 @@ class MGRec(BaseModel):
         # Global Graph Learning
         self.transition_graph = data_handler.train_dataloader.dataset.transition_graph.to(self.device)
         self.user_edges = data_handler.train_dataloader.dataset.user_edges
-        self.item_simgraph = data_handler.train_dataloader.dataset.co_interaction_graph.to(self.device)
+        self.co_interaction_graph = data_handler.train_dataloader.dataset.co_interaction_graph.to(self.device)
         self.graph_dropout = configs["model"]["graph_dropout_prob"]
 
         self.gcn = GCN(self.emb_size, self.emb_size, self.graph_dropout)
@@ -190,29 +203,22 @@ class MGRec(BaseModel):
     def cal_loss(self, batch_data):
         batch_user, batch_seqs, batch_pos_items = batch_data
         last_items = batch_seqs[:, -1].view(-1)
-        # graph view
-        # masked_g = self.transition_graph
-        # aug_g = graph_augment(self.transition_graph, batch_user, self.user_edges)
-        # ui_interaction_graph = build_ui_interaction_graph(batch_user, batch_seqs, self.item_num, self.device)
-        # session_graph = ui_interaction_graph.transpose(0,1) * ui_interaction_graph
 
         transition_graph_emb = self.gcn_forward(self.transition_graph) # [B, N_node_train, D]
-        co_interaction_graph_emb = self.gcn_forward(self.item_simgraph)
-        # session_graph_emb = self.gcn_forward(session_graph)
+        co_interaction_graph_emb = self.gcn_forward(self.co_interaction_graph)
 
-        transition_graph_emb_last_items = transition_graph_emb[last_items]
-        co_interaction_graph_emb_last_items = co_interaction_graph_emb[last_items]
+        attn_transition_emb = recency_attention(transition_graph_emb)
+        attn_co_interaction_emb = recency_attention(co_interaction_graph_emb)
 
-        seq_output = self.forward(batch_seqs)
+        seq_emb = self.forward(batch_seqs)
 
         # hybrid_emb = transition_graph_emb + co_interaction_graph_emb
         # z = nn.Tanh(self.mlp(hybrid_emb))
         # S = hybrid_emb / self.max_len
 
-        # Fusion After CL
         # 3, N_mask, dim
         hybrid_emb = torch.stack(
-            (seq_output, transition_graph_emb[last_items], co_interaction_graph_emb[last_items]), dim=0)
+            (seq_emb, attn_transition_emb, attn_co_interaction_emb), dim=0)
         weights = (torch.matmul(hybrid_emb, self.attn_weights.unsqueeze(0))*self.attn).sum(-1)
         # 3, N_mask, 1
         score = F.softmax(weights, dim=0).unsqueeze(-1)
