@@ -74,17 +74,15 @@ def build_ui_interaction_graph(batch_user, batch_seqs, item_num, device):
     return ui_interaction_graph
 
 def recency_attention(item_emb):
-    B, N, D = item_emb.shape
-    seq_len = (item_emb > 0).sum(dim=1)                                               # (B,)
+    N, D = item_emb.shape
+    seq_len = (item_emb > 0).sum(dim=1)                                               # (N,)
 
     pos = torch.arange(N, device=item_emb.device)                                     # (N,)
     dist = (N - 1) - pos                                                              # (N,), last -> 0
-    dist = -dist.float()                                                              # (N,)
+    logits = -dist.float()                                                              # (N,)
 
-    logits = dist.unsqueeze(0).expand(B, N)                                           # (B, N)
-
-    attn = F.softmax(logits, dim=-1)                                                  # (B, N)
-    new_item_emb = (attn.unsqueeze(-1) * item_emb).sum(dim=1) / seq_len.unsqueeze(-1)       # (B, D)
+    attn = F.softmax(logits, dim=-1)                                                  # (N,)
+    new_item_emb = (attn.unsqueeze(-1) * item_emb).sum(dim=1) / seq_len.unsqueeze(-1)       # (N, D)
     return new_item_emb
 
 class GCN(nn.Module):
@@ -204,13 +202,22 @@ class MGRec(BaseModel):
         batch_user, batch_seqs, batch_pos_items = batch_data
         last_items = batch_seqs[:, -1].view(-1)
 
+
         transition_graph_emb = self.gcn_forward(self.transition_graph) # [B, N_node_train, D]
         co_interaction_graph_emb = self.gcn_forward(self.co_interaction_graph)
+
+        print(f"Transition_graph shape: {transition_graph_emb.shape}")
 
         attn_transition_emb = recency_attention(transition_graph_emb)
         attn_co_interaction_emb = recency_attention(co_interaction_graph_emb)
 
+        print(f"Transition_emb shape: {attn_transition_emb.shape}")
+        print(f"Co_interaction_emb shape: {attn_co_interaction_emb.shape}")
+
         seq_emb = self.forward(batch_seqs)
+
+        print(f"seq_emb shape: {seq_emb.shape}")
+
 
         # hybrid_emb = transition_graph_emb + co_interaction_graph_emb
         # z = nn.Tanh(self.mlp(hybrid_emb))
@@ -241,12 +248,18 @@ class MGRec(BaseModel):
         # graph view
         transition_graph = self.data_handler.test_dataloader.dataset.transition_graph.to(self.device)
         co_interaction_graph = self.data_handler.test_dataloader.dataset.co_interaction_graph.to(self.device)
-        itransition_graph_output_raw = self.gcn_forward(transition_graph)
-        itransition_graph_output_seq = itransition_graph_output_raw[last_items]
-        ico_interaction_graph_output_seq = self.gcn_forward(co_interaction_graph)[last_items]
+
+        transition_graph_emb = self.gcn_forward(transition_graph)
+        co_interaction_graph_emb = self.gcn_forward(co_interaction_graph)
+
+        attn_transition_emb = recency_attention(transition_graph_emb)
+        attn_co_interaction_emb = recency_attention(co_interaction_graph_emb)
+
+        seq_emb = self.forward(batch_seqs)
+        
         # 3, N_mask, dim
         hybrid_emb = torch.stack(
-            (seq_output, itransition_graph_output_seq, ico_interaction_graph_output_seq), dim=0)
+            (seq_emb, attn_transition_emb, attn_co_interaction_emb), dim=0)
         weights = (torch.matmul(
             hybrid_emb, self.attn_weights.unsqueeze(0))*self.attn).sum(-1)
         # 3, N_mask, 1
