@@ -4,13 +4,15 @@ optimizer:
   weight_decay: 0
 
 train:
-  epoch: 50
+  epoch: 150
   batch_size: 512
   save_model: true
   log_loss: false
   test_step: 1
   reproducible: true
   seed: 2023
+  early_stop: True
+  patience: 20
 
 test:
   metrics: [mrr, ndcg]

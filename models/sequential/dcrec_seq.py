@@ -108,14 +108,14 @@ def graph_dual_neighbor_readout(g: dgl.DGLGraph, aug_g: dgl.DGLGraph, node_ids, 
     # sample foreign neighbors
     for i, nbrs in enumerate(foreign_neighbors):
         if len(nbrs) > 10:
-            nbrs = random.sample(nbrs, 10)
+            nbrs = random.sample(list(nbrs), 10)
             foreign_neighbors[i] = set(nbrs)
     civil_neighbors = [all_neighbors[i]-foreign_neighbors[i]
                        for i in range(len(all_neighbors))]
     # sample civil neighbors
     for i, nbrs in enumerate(civil_neighbors):
         if len(nbrs) > 10:
-            nbrs = random.sample(nbrs, 10)
+            nbrs = random.sample(list(nbrs), 10)
             civil_neighbors[i] = set(nbrs)
     for_lens = [len(t) for t in foreign_neighbors]
     cv_lens = torch.tensor([len(t)
