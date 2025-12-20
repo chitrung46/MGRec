@@ -74,15 +74,19 @@ def build_ui_interaction_graph(batch_user, batch_seqs, item_num, device):
     return ui_interaction_graph
 
 def recency_attention(item_emb):
-    N, D = item_emb.shape
+    B, N, D = item_emb.shape
     seq_len = (item_emb > 0).sum(dim=1)                                               # (N,)
+    print(f"seq_len shape: {seq_len.shape}")
+    print(f"seq_len 0: {seq_len[0]}")
 
     pos = torch.arange(N, device=item_emb.device)                                     # (N,)
     dist = (N - 1) - pos                                                              # (N,), last -> 0
-    logits = -dist.float()                                                              # (N,)
+    dist = -dist.float()                                                              # (N,)
 
-    attn = F.softmax(logits, dim=-1)                                                  # (N,)
-    new_item_emb = (attn.unsqueeze(-1) * item_emb).sum(dim=1) / seq_len.unsqueeze(-1)       # (N, D)
+    logits = dist.unsqueeze(0).expand(B, N)                                           # (B, N)
+
+    attn = F.softmax(logits, dim=-1)                                                  # (B, N)
+    new_item_emb = (attn.unsqueeze(-1) * item_emb).sum(dim=1) / seq_len.unsqueeze(-1)       # (B, D)
     return new_item_emb
 
 class GCN(nn.Module):
@@ -206,13 +210,15 @@ class MGRec(BaseModel):
         transition_graph_emb = self.gcn_forward(self.transition_graph) # [B, N_node_train, D]
         co_interaction_graph_emb = self.gcn_forward(self.co_interaction_graph)
 
-        print(f"Transition_graph shape: {transition_graph_emb.shape}")
+        print(f"batch_seqs shape: {batch_seqs.shape}")
 
-        attn_transition_emb = recency_attention(transition_graph_emb)
-        attn_co_interaction_emb = recency_attention(co_interaction_graph_emb)
+        print(f"transition_graph_emb shape: {transition_graph_emb.shape}")
 
-        print(f"Transition_emb shape: {attn_transition_emb.shape}")
-        print(f"Co_interaction_emb shape: {attn_co_interaction_emb.shape}")
+        attn_transition_emb = recency_attention(transition_graph_emb[batch_seqs])
+        attn_co_interaction_emb = recency_attention(co_interaction_graph_emb[batch_seqs])
+
+        print(f"attn_transition_emb shape: {attn_transition_emb.shape}")
+        print(f"attn_co_interaction_emb shape: {attn_co_interaction_emb.shape}")
 
         seq_emb = self.forward(batch_seqs)
 
