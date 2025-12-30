@@ -21,7 +21,7 @@ test:
 
 data:
   type: sequential
-  name: ml-20m
+  name: music
   seq_aug: true
 
 model:
@@ -43,3 +43,12 @@ tune:
   hyperparameters: [cl_lambda, weight_mean]
   cl_lambda: [1.0e-4, 1.0e-3, 1.0e-2]
   weight_mean: [0.4, 0.5, 0.6]
+
+bre:
+  bre_model_name: "bert-base-uncased"
+  bre_max_len: 32
+  out_dim: 64
+  dropout: 0.2
+  bre_freeze_bert: true
+  bre_pooling: "mean"
+  bre_normalize: true

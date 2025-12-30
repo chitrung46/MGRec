@@ -148,9 +148,9 @@ def graph_augment(g: dgl.DGLGraph, user_ids, user_edges):
     node_indicies_b = np.concatenate(
         user_edges.loc[user_ids, "item_edges_b"].to_numpy())
     node_indicies_a = torch.from_numpy(
-        node_indicies_a).to(g.device)
+        node_indicies_a).to(g.device, dtype=torch.int64)
     node_indicies_b = torch.from_numpy(
-        node_indicies_b).to(g.device)
+        node_indicies_b).to(g.device, dtype=torch.int64)
     edge_ids = g.edge_ids(node_indicies_a, node_indicies_b)
 
     aug_g: dgl.DGLGraph = deepcopy(g)

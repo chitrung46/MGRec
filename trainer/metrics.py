@@ -94,10 +94,9 @@ class Metric(object):
         test_user_num = len(test_dataloader.dataset.test_users)
         for _, tem in enumerate(test_dataloader):
             if not isinstance(tem, list):
-                tem = [tem]
+                tem = list(tem)
             test_user = tem[0].numpy().tolist()
-            batch_data = list(
-                map(lambda x: x.long().to(configs['device']), tem))
+            batch_data = list(x.long().to(configs['device']) if isinstance(x, torch.Tensor) else x for x in tem)
             # predict result
             with torch.no_grad():
                 batch_pred = model.full_predict(batch_data)
